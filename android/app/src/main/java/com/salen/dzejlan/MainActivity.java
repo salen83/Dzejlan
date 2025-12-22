@@ -1,4 +1,4 @@
-package com.dzenan.win;
+package com.salen.dzejlan;
 
 import com.getcapacitor.BridgeActivity;
 
