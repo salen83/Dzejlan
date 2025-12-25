@@ -1,93 +1,85 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useMemo } from "react";
 import { MatchesContext } from "../MatchesContext";
 
 export default function Screen7() {
   const { futureMatches, rows } = useContext(MatchesContext);
-  const [ranked, setRanked] = useState({
-    gg: [],
-    ng: [],
-    over2: []
-  });
 
-  useEffect(() => {
-    if (!futureMatches || !rows) return;
+  const getLastMatches = (team, N = 5) => {
+    const matches = rows
+      .filter(r => r.home === team || r.away === team)
+      .sort((a, b) => new Date(b.datum.split('.').reverse().join('-')) - new Date(a.datum.split('.').reverse().join('-')));
+    return matches.slice(0, N);
+  };
 
-    const teamStats = {};
-
-    rows.forEach(r => {
-      if (!r.home || !r.away || !r.full) return;
-      const g = r.full.split(":").map(Number);
-      if (g.length !== 2) return;
-
-      [r.home, r.away].forEach(t => {
-        if (!teamStats[t]) {
-          teamStats[t] = { total: 0, gg: 0, ng: 0, over2: 0 };
-        }
-      });
-
-      teamStats[r.home].total++;
-      teamStats[r.away].total++;
-
-      if (g[0] > 0 && g[1] > 0) {
-        teamStats[r.home].gg++;
-        teamStats[r.away].gg++;
-      }
-      if (g[0] === 0 || g[1] === 0) {
-        teamStats[r.home].ng++;
-        teamStats[r.away].ng++;
-      }
-      if (g[0] + g[1] >= 2) {
-        teamStats[r.home].over2++;
-        teamStats[r.away].over2++;
-      }
+  // Izračunavanje verovatnoće 2+
+  const calculateProbabilities = (team) => {
+    const lastMatches = getLastMatches(team);
+    if (!lastMatches.length) return { _2plus: 0 };
+    let count = 0, totalWeight = 0;
+    lastMatches.forEach((m, i) => {
+      const weight = i + 1;
+      const goalsHome = parseInt(m.ft.split(':')[0] || 0);
+      const goalsAway = parseInt(m.ft.split(':')[1] || 0);
+      if ((goalsHome + goalsAway) >= 2) count += weight;
+      totalWeight += weight;
     });
+    return { _2plus: Math.round((count / totalWeight) * 100) };
+  };
 
-    const safe = (t, k) =>
-      t && t.total ? (t[k] / t.total) * 100 : 0;
-
-    const all = (futureMatches || []).map(m => {
-      const h = teamStats[m.home];
-      const a = teamStats[m.away];
-
-      return {
-        label: `${m.home} - ${m.away}`,
-        gg: ((safe(h, "gg") + safe(a, "gg")) / 2).toFixed(1),
-        ng: ((safe(h, "ng") + safe(a, "ng")) / 2).toFixed(1),
-        over2: ((safe(h, "over2") + safe(a, "over2")) / 2).toFixed(1)
-      };
-    });
-
-    setRanked({
-      gg: [...all].sort((a, b) => b.gg - a.gg),
-      ng: [...all].sort((a, b) => b.ng - a.ng),
-      over2: [...all].sort((a, b) => b.over2 - a.over2)
-    });
+  const rankedMatches = useMemo(() => {
+    return (futureMatches || [])
+      .map(m => {
+        const homeProb = calculateProbabilities(m.home);
+        const awayProb = calculateProbabilities(m.away);
+        return { ...m, _2plus: Math.round((homeProb._2plus + awayProb._2plus) / 2) };
+      })
+      .sort((a, b) => b._2plus - a._2plus);
   }, [futureMatches, rows]);
 
-  return (
-    <div className="container">
-      <h1>Rangiranje – Metoda 2</h1>
+  const deleteRow = (index) => {
+    const copy = [...futureMatches];
+    copy.splice(index, 1);
+    localStorage.setItem("futureMatches", JSON.stringify(copy));
+  };
 
-      <div style={{ display: "flex", gap: "30px" }}>
-        {["gg", "ng", "over2"].map(type => (
-          <table key={type}>
-            <thead>
-              <tr>
-                <th>{type.toUpperCase()}</th>
-                <th>%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked[type].map((m, i) => (
-                <tr key={i}>
-                  <td>{m.label}</td>
-                  <td>{m[type]}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ))}
-      </div>
+  return (
+    <div>
+      <h3>Rangiranje po 2+ % (opadajuće)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Datum</th>
+            <th>Vreme</th>
+            <th>Liga</th>
+            <th>Domacin</th>
+            <th>Gost</th>
+            <th>2+ %</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rankedMatches.map((m, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td>{m.datum}</td>
+              <td>{m.vreme}</td>
+              <td>{m.liga}</td>
+              <td style={{ textAlign: 'left' }}>{m.home}</td>
+              <td style={{ textAlign: 'left' }}>{m.away}</td>
+              <td>{m._2plus}%</td>
+              <td>
+                <button
+                  onClick={() => deleteRow(i)}
+                  style={{ padding: '0', fontSize: '10px', height: '16px', width: '16px' }}
+                >
+                  x
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

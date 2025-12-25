@@ -1,113 +1,90 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useMemo } from "react";
 import { MatchesContext } from "../MatchesContext";
 
 export default function Screen5() {
   const { futureMatches, rows } = useContext(MatchesContext);
-  const [predictions, setPredictions] = useState([]);
 
-  useEffect(() => {
-    if (!futureMatches || futureMatches.length === 0) {
-      setPredictions([]);
-      return;
-    }
+  // Uzmi poslednjih N mečeva za dati tim
+  const getLastMatches = (team, N = 5) => {
+    const matches = rows
+      .filter(r => r.home === team || r.away === team)
+      .sort((a, b) => new Date(b.datum.split('.').reverse().join('-')) - new Date(a.datum.split('.').reverse().join('-')));
+    return matches.slice(0, N);
+  };
 
-    const teamsStats = {};
-    rows.forEach(row => {
-      const home = row.home;
-      const away = row.away;
-      const full = row.full;
-      if (!home || !away || !full) return;
-      const goals = full.split(":").map(x => parseInt(x, 10));
-      if (goals.length !== 2) return;
-
-      [home, away].forEach(team => {
-        if (!teamsStats[team]) {
-          teamsStats[team] = { total: 0, gg: 0, ng: 0, over2: 0 };
-        }
-      });
-
-      teamsStats[home].total += 1;
-      teamsStats[away].total += 1;
-
-      if (goals[0] > 0 && goals[1] > 0) {
-        teamsStats[home].gg += 1;
-        teamsStats[away].gg += 1;
-      }
-      if (goals[0] === 0 || goals[1] === 0) {
-        teamsStats[home].ng += 1;
-        teamsStats[away].ng += 1;
-      }
-      if (goals[0] + goals[1] >= 2) {
-        teamsStats[home].over2 += 1;
-        teamsStats[away].over2 += 1;
-      }
+  // Izračunavanje verovatnoće GG
+  const calculateProbabilities = (team) => {
+    const lastMatches = getLastMatches(team);
+    if (!lastMatches.length) return { GG: 0 };
+    let GG = 0, totalWeight = 0;
+    lastMatches.forEach((m, i) => {
+      const weight = i + 1;
+      const goalsHome = parseInt(m.ft.split(':')[0] || 0);
+      const goalsAway = parseInt(m.ft.split(':')[1] || 0);
+      if (goalsHome > 0 && goalsAway > 0) GG += weight;
+      totalWeight += weight;
     });
+    return { GG: Math.round((GG / totalWeight) * 100) };
+  };
 
-    const preds = (futureMatches || []).map(match => {
-      const homeStats = teamsStats[match.home] || { total: 0, gg: 0, ng: 0, over2: 0 };
-      const awayStats = teamsStats[match.away] || { total: 0, gg: 0, ng: 0, over2: 0 };
-      const totalMatches = homeStats.total + awayStats.total || 1;
-
-      return {
-        time: match.time,
-        home: match.home,
-        away: match.away,
-        gg: Math.round((homeStats.gg + awayStats.gg) / totalMatches * 100),
-        ng: Math.round((homeStats.ng + awayStats.ng) / totalMatches * 100),
-        over2: Math.round((homeStats.over2 + awayStats.over2) / totalMatches * 100)
-      };
-    });
-
-    setPredictions(preds);
+  // Rangiranje budućih mečeva po GG %
+  const rankedMatches = useMemo(() => {
+    return (futureMatches || [])
+      .map(m => {
+        const homeProb = calculateProbabilities(m.home);
+        const awayProb = calculateProbabilities(m.away);
+        return { ...m, GG: Math.round((homeProb.GG + awayProb.GG) / 2) };
+      })
+      .sort((a, b) => b.GG - a.GG);
   }, [futureMatches, rows]);
 
-  const sortByGG = [...predictions].sort((a,b) => b.gg - a.gg);
-  const sortByNG = [...predictions].sort((a,b) => b.ng - a.ng);
-  const sortByOver2 = [...predictions].sort((a,b) => b.over2 - a.over2);
+  // Brisanje reda
+  const deleteRow = (index) => {
+    const copy = [...futureMatches];
+    copy.splice(index, 1);
+    localStorage.setItem("futureMatches", JSON.stringify(copy));
+  };
 
   return (
-    <div className="container">
-      <h1>Rangirani mečevi po verovatnoći</h1>
-      <div style={{ display: "flex", gap: "20px", justifyContent: "space-between" }}>
-        {/* GG */}
-        <table>
-          <thead>
-            <tr><th colSpan={4}>GG %</th></tr>
-            <tr><th>Vreme</th><th>Domaćin</th><th>Gost</th><th>GG %</th></tr>
-          </thead>
-          <tbody>
-            {sortByGG.map((m,i) => (
-              <tr key={i}><td>{m.time}</td><td>{m.home}</td><td>{m.away}</td><td>{m.gg}%</td></tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* NG */}
-        <table>
-          <thead>
-            <tr><th colSpan={4}>NG %</th></tr>
-            <tr><th>Vreme</th><th>Domaćin</th><th>Gost</th><th>NG %</th></tr>
-          </thead>
-          <tbody>
-            {sortByNG.map((m,i) => (
-              <tr key={i}><td>{m.time}</td><td>{m.home}</td><td>{m.away}</td><td>{m.ng}%</td></tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* 2+ */}
-        <table>
-          <thead>
-            <tr><th colSpan={4}>2+ %</th></tr>
-            <tr><th>Vreme</th><th>Domaćin</th><th>Gost</th><th>2+ %</th></tr>
-          </thead>
-          <tbody>
-            {sortByOver2.map((m,i) => (
-              <tr key={i}><td>{m.time}</td><td>{m.home}</td><td>{m.away}</td><td>{m.over2}%</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      <h3>Rangiranje po GG % (opadajuće)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Datum</th>
+            <th>Vreme</th>
+            <th>Liga</th>
+            <th>Domacin</th>
+            <th>Gost</th>
+            <th>GG %</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rankedMatches.map((m, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td>{m.datum}</td>
+              <td>{m.vreme}</td>
+              <td>{m.liga}</td>
+              <td style={{ textAlign: 'left' }}>{m.home}</td>
+              <td style={{ textAlign: 'left' }}>{m.away}</td>
+              <td>{m.GG}%</td>
+              <td>
+                <button
+                  onClick={() => {
+                    deleteRow(i);
+                  }}
+                  style={{ padding: '0', fontSize: '10px', height: '16px', width: '16px' }}
+                >
+                  x
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

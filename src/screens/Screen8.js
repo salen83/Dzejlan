@@ -1,90 +1,81 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useMemo } from "react";
 import { MatchesContext } from "../MatchesContext";
 
 export default function Screen8() {
   const { futureMatches, rows } = useContext(MatchesContext);
-  const [predictions, setPredictions] = useState([]);
 
-  const lastN = 5; // broj poslednjih mečeva koji se uzimaju u obzir
+  const getLastMatches = (team, N = 5) => {
+    const matches = rows
+      .filter(r => r.home === team || r.away === team)
+      .sort((a, b) => new Date(b.datum.split('.').reverse().join('-')) - new Date(a.datum.split('.').reverse().join('-')));
+    return matches.slice(0, N);
+  };
 
-  useEffect(() => {
-    if (!futureMatches || !rows) return;
-
-    const calcPredictions = (futureMatches || []).map(match => {
-      const { home, away } = match;
-
-      // filtriramo zadnjih n mečeva za domaćina i gosta
-      const homeGames = rows.filter(r => r.home === home || r.away === home).slice(-lastN);
-      const awayGames = rows.filter(r => r.home === away || r.away === away).slice(-lastN);
-
-      const calcGG = games => games.length 
-        ? games.filter(r => {
-            const [h,a] = r.full.split(":").map(Number);
-            return h > 0 && a > 0;
-          }).length / games.length
-        : 0;
-
-      const calcOver2 = games => games.length
-        ? games.filter(r => {
-            const [h,a] = r.full.split(":").map(Number);
-            return h + a >= 2;
-          }).length / games.length
-        : 0;
-
-      const homeGG = calcGG(homeGames);
-      const awayGG = calcGG(awayGames);
-      const homeOver2 = calcOver2(homeGames);
-      const awayOver2 = calcOver2(awayGames);
-
-      // istorija međusobnih susreta
-      const headToHead = rows.filter(r =>
-        (r.home === home && r.away === away) || (r.home === away && r.away === home)
-      ).slice(-lastN);
-
-      const h2hGG = calcGG(headToHead);
-      const h2hOver2 = calcOver2(headToHead);
-
-      // ponderisana formula: 50% domaćin/gost, 30% h2h, 20% random faktor
-      const gg = Math.min(Math.round((homeGG*0.4 + awayGG*0.4 + h2hGG*0.2)*100), 100);
-      const over2 = Math.min(Math.round((homeOver2*0.4 + awayOver2*0.4 + h2hOver2*0.2)*100), 100);
-      const ng = 100 - gg;
-
-      return {
-        time: match.time,
-        home,
-        away,
-        gg,
-        ng,
-        over2
-      };
+  // Izračunavanje verovatnoće 7+
+  const calculateProbabilities = (team) => {
+    const lastMatches = getLastMatches(team);
+    if (!lastMatches.length) return { _7plus: 0 };
+    let count = 0, totalWeight = 0;
+    lastMatches.forEach((m, i) => {
+      const weight = i + 1;
+      const goalsHome = parseInt(m.ft.split(':')[0] || 0);
+      const goalsAway = parseInt(m.ft.split(':')[1] || 0);
+      if ((goalsHome + goalsAway) >= 7) count += weight;
+      totalWeight += weight;
     });
+    return { _7plus: Math.round((count / totalWeight) * 100) };
+  };
 
-    setPredictions(calcPredictions);
+  const rankedMatches = useMemo(() => {
+    return (futureMatches || [])
+      .map(m => {
+        const homeProb = calculateProbabilities(m.home);
+        const awayProb = calculateProbabilities(m.away);
+        return { ...m, _7plus: Math.round((homeProb._7plus + awayProb._7plus) / 2) };
+      })
+      .sort((a, b) => b._7plus - a._7plus);
   }, [futureMatches, rows]);
 
+  const deleteRow = (index) => {
+    const copy = [...futureMatches];
+    copy.splice(index, 1);
+    localStorage.setItem("futureMatches", JSON.stringify(copy));
+  };
+
   return (
-    <div className="container">
-      <h1>Napredna predikcija (Screen8 – Najteža metoda)</h1>
+    <div>
+      <h3>Rangiranje po 7+ % (opadajuće)</h3>
       <table>
         <thead>
           <tr>
+            <th>#</th>
+            <th>Datum</th>
             <th>Vreme</th>
-            <th>Domaćin</th>
+            <th>Liga</th>
+            <th>Domacin</th>
             <th>Gost</th>
-            <th>GG %</th>
-            <th>NG %</th>
-            <th>2+ %</th>
+            <th>7+ %</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {predictions.map((row, idx) => (
-            <tr key={idx}>
-              <td>{row.time}</td>
-              <td>{row.home}</td>
-              <td>{row.away}</td>
-              <td>{row.gg}%</td>
-              <td>{row.ng}%</td>
-              <td>{row.over2}%</td>
+          {rankedMatches.map((m, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td>{m.datum}</td>
+              <td>{m.vreme}</td>
+              <td>{m.liga}</td>
+              <td style={{ textAlign: 'left' }}>{m.home}</td>
+              <td style={{ textAlign: 'left' }}>{m.away}</td>
+              <td>{m._7plus}%</td>
+              <td>
+                <button
+                  onClick={() => deleteRow(i)}
+                  style={{ padding: '0', fontSize: '10px', height: '16px', width: '16px' }}
+                >
+                  x
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

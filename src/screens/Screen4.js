@@ -1,96 +1,112 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useMemo } from "react";
 import { MatchesContext } from "../MatchesContext";
 
 export default function Screen4() {
-  const { futureMatches, rows } = useContext(MatchesContext); // rows = zavrseni mecevi (Screen1)
-  const [predictions, setPredictions] = useState([]);
+  const { rows, teamStats, futureMatches } = useContext(MatchesContext);
 
-  useEffect(() => {
-    if (!futureMatches || futureMatches.length === 0) {
-      setPredictions([]);
-      return;
-    }
+  // Funkcija za uzimanje poslednjih N mečeva tima
+  const getLastMatches = (team, N = 5) => {
+    const matches = rows
+      .filter(r => r.home === team || r.away === team)
+      .sort((a,b) => new Date(b.datum.split('.').reverse().join('-')) - new Date(a.datum.split('.').reverse().join('-')));
+    return matches.slice(0, N);
+  };
 
-    // Kreiramo mapu statistike timova iz Screen2
-    const teamsStats = {};
-    rows.forEach(row => {
-      const home = row.home;
-      const away = row.away;
-      const full = row.full;
-      if (!home || !away || !full) return;
-      const goals = full.split(":").map(x => parseInt(x, 10));
-      if (goals.length !== 2) return;
+  // Računanje verovatnoće GG, NG, 2+, 7+ za dati tim
+  const calculateProbabilities = (team) => {
+    const lastMatches = getLastMatches(team);
+    if (!lastMatches.length) return { GG: 0, NG: 0, "2+": 0, "7+": 0 };
 
-      [home, away].forEach(team => {
-        if (!teamsStats[team]) {
-          teamsStats[team] = { total: 0, gg: 0, ng: 0, over2: 0 };
-        }
-      });
+    let GG = 0, NG = 0, twoPlus = 0, sevenPlus = 0;
+    let totalWeight = 0;
 
-      teamsStats[home].total += 1;
-      teamsStats[away].total += 1;
+    lastMatches.forEach((m, i) => {
+      const weight = i+1; // noviji meč = veća težina
+      const goalsHome = parseInt(m.ft.split(':')[0] || 0);
+      const goalsAway = parseInt(m.ft.split(':')[1] || 0);
+      const totalGoals = goalsHome + goalsAway;
 
-      // GG: oba tima daju gol
-      if (goals[0] > 0 && goals[1] > 0) {
-        teamsStats[home].gg += 1;
-        teamsStats[away].gg += 1;
-      }
+      // GG
+      if (goalsHome > 0 && goalsAway > 0) GG += weight;
+      // NG
+      if (goalsHome === 0 || goalsAway === 0) NG += weight;
+      // 2+
+      if (totalGoals >= 2) twoPlus += weight;
+      // 7+
+      if (totalGoals >= 7) sevenPlus += weight;
 
-      // NG: bar jedan tim ne daje gol
-      if (goals[0] === 0 || goals[1] === 0) {
-        teamsStats[home].ng += 1;
-        teamsStats[away].ng += 1;
-      }
-
-      // 2+: ukupno golova >= 2
-      if (goals[0] + goals[1] >= 2) {
-        teamsStats[home].over2 += 1;
-        teamsStats[away].over2 += 1;
-      }
+      totalWeight += weight;
     });
 
-    const preds = (futureMatches || []).map(match => {
-      const homeStats = teamsStats[match.home] || { total: 0, gg: 0, ng: 0, over2: 0 };
-      const awayStats = teamsStats[match.away] || { total: 0, gg: 0, ng: 0, over2: 0 };
+    return {
+      GG: Math.round((GG / totalWeight) * 100),
+      NG: Math.round((NG / totalWeight) * 100),
+      "2+": Math.round((twoPlus / totalWeight) * 100),
+      "7+": Math.round((sevenPlus / totalWeight) * 100)
+    };
+  };
 
-      const totalMatches = homeStats.total + awayStats.total || 1; // izbegavamo deljenje nulom
+  // Kombinovanje verovatnoća za buduće mečeve
+  const predictions = useMemo(() => {
+    return (futureMatches || []).map(match => {
+      const homeProb = calculateProbabilities(match.home);
+      const awayProb = calculateProbabilities(match.away);
 
+      // Prosek domaćin/gost
       return {
-        time: match.time,
-        home: match.home,
-        away: match.away,
-        gg: Math.round((homeStats.gg + awayStats.gg) / totalMatches * 100),
-        ng: Math.round((homeStats.ng + awayStats.ng) / totalMatches * 100),
-        over2: Math.round((homeStats.over2 + awayStats.over2) / totalMatches * 100)
+        ...match,
+        GG: Math.round((homeProb.GG + awayProb.GG)/2),
+        NG: Math.round((homeProb.NG + awayProb.NG)/2),
+        "2+": Math.round((homeProb["2+"] + awayProb["2+"])/2),
+        "7+": Math.round((homeProb["7+"] + awayProb["7+"])/2)
       };
     });
-
-    setPredictions(preds);
   }, [futureMatches, rows]);
 
   return (
-    <div className="container">
-      <h1>Predikcije (Metoda 1)</h1>
+    <div>
       <table>
         <thead>
           <tr>
-            <th>Vreme</th>
-            <th>Domaćin</th>
-            <th>Gost</th>
+            <th style={{ width:'28px' }}>#</th>
+            <th style={{ width:'80px' }}>Datum</th>
+            <th style={{ width:'60px' }}>Vreme</th>
+            <th style={{ width:'120px' }}>Liga</th>
+            <th style={{ width:'120px' }}>Domacin</th>
+            <th style={{ width:'120px' }}>Gost</th>
+            <th style={{ width:'40px' }}>x</th>
             <th>GG %</th>
             <th>NG %</th>
             <th>2+ %</th>
+            <th>7+ %</th>
           </tr>
         </thead>
         <tbody>
           {predictions.map((m, i) => (
             <tr key={i}>
-              <td>{m.time}</td>
-              <td>{m.home}</td>
-              <td>{m.away}</td>
-              <td>{m.gg}%</td>
-              <td>{m.ng}%</td>
-              <td>{m.over2}%</td>
+              <td>{i+1}</td>
+              <td>{m.datum}</td>
+              <td>{m.vreme}</td>
+              <td>{m.liga}</td>
+              <td style={{ textAlign:'left' }}>{m.home}</td>
+              <td style={{ textAlign:'left' }}>{m.away}</td>
+              <td>
+                <button
+                  onClick={() => {
+                    const copy = [...futureMatches];
+                    copy.splice(i,1);
+                    localStorage.setItem("futureMatches", JSON.stringify(copy));
+                    window.location.reload();
+                  }}
+                  style={{ padding:'0', fontSize:'10px', height:'16px', width:'16px' }}
+                >
+                  x
+                </button>
+              </td>
+              <td>{m.GG}%</td>
+              <td>{m.NG}%</td>
+              <td>{m["2+"]}%</td>
+              <td>{m["7+"]}%</td>
             </tr>
           ))}
         </tbody>

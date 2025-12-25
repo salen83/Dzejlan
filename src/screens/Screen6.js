@@ -1,95 +1,81 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useMemo } from "react";
 import { MatchesContext } from "../MatchesContext";
 
 export default function Screen6() {
   const { futureMatches, rows } = useContext(MatchesContext);
-  const [predictions, setPredictions] = useState([]);
 
-  useEffect(() => {
-    if (!futureMatches || !rows) return;
+  const getLastMatches = (team, N = 5) => {
+    const matches = rows
+      .filter(r => r.home === team || r.away === team)
+      .sort((a, b) => new Date(b.datum.split('.').reverse().join('-')) - new Date(a.datum.split('.').reverse().join('-')));
+    return matches.slice(0, N);
+  };
 
-    // statistika po timu iz Screen2 logike
-    const teamStats = {};
-
-    rows.forEach(r => {
-      if (!r.home || !r.away || !r.full) return;
-      const g = r.full.split(":").map(Number);
-      if (g.length !== 2) return;
-
-      [r.home, r.away].forEach(t => {
-        if (!teamStats[t]) {
-          teamStats[t] = { total: 0, gg: 0, ng: 0, over2: 0 };
-        }
-      });
-
-      teamStats[r.home].total++;
-      teamStats[r.away].total++;
-
-      if (g[0] > 0 && g[1] > 0) {
-        teamStats[r.home].gg++;
-        teamStats[r.away].gg++;
-      }
-
-      if (g[0] === 0 || g[1] === 0) {
-        teamStats[r.home].ng++;
-        teamStats[r.away].ng++;
-      }
-
-      if (g[0] + g[1] >= 2) {
-        teamStats[r.home].over2++;
-        teamStats[r.away].over2++;
-      }
+  // Izračunavanje verovatnoće NG
+  const calculateProbabilities = (team) => {
+    const lastMatches = getLastMatches(team);
+    if (!lastMatches.length) return { NG: 0 };
+    let NG = 0, totalWeight = 0;
+    lastMatches.forEach((m, i) => {
+      const weight = i + 1;
+      const goalsHome = parseInt(m.ft.split(':')[0] || 0);
+      const goalsAway = parseInt(m.ft.split(':')[1] || 0);
+      if (goalsHome === 0 || goalsAway === 0) NG += weight;
+      totalWeight += weight;
     });
+    return { NG: Math.round((NG / totalWeight) * 100) };
+  };
 
-    const calc = (futureMatches || []).map(m => {
-      const h = teamStats[m.home];
-      const a = teamStats[m.away];
-
-      const safe = (x, y) => (x && x.total ? (y / x.total) * 100 : 0);
-
-      const gg =
-        (safe(h, h?.gg || 0) + safe(a, a?.gg || 0)) / 2;
-      const ng =
-        (safe(h, h?.ng || 0) + safe(a, a?.ng || 0)) / 2;
-      const over2 =
-        (safe(h, h?.over2 || 0) + safe(a, a?.over2 || 0)) / 2;
-
-      return {
-        time: m.time,
-        home: m.home,
-        away: m.away,
-        gg: gg.toFixed(1),
-        ng: ng.toFixed(1),
-        over2: over2.toFixed(1)
-      };
-    });
-
-    setPredictions(calc);
+  const rankedMatches = useMemo(() => {
+    return (futureMatches || [])
+      .map(m => {
+        const homeProb = calculateProbabilities(m.home);
+        const awayProb = calculateProbabilities(m.away);
+        return { ...m, NG: Math.round((homeProb.NG + awayProb.NG) / 2) };
+      })
+      .sort((a, b) => b.NG - a.NG);
   }, [futureMatches, rows]);
 
+  const deleteRow = (index) => {
+    const copy = [...futureMatches];
+    copy.splice(index, 1);
+    localStorage.setItem("futureMatches", JSON.stringify(copy));
+  };
+
   return (
-    <div className="container">
-      <h1>Predviđanja – Metoda 2 (Tim vs Tim)</h1>
+    <div>
+      <h3>Rangiranje po NG % (opadajuće)</h3>
       <table>
         <thead>
           <tr>
+            <th>#</th>
+            <th>Datum</th>
             <th>Vreme</th>
-            <th>Domaćin</th>
+            <th>Liga</th>
+            <th>Domacin</th>
             <th>Gost</th>
-            <th>GG %</th>
             <th>NG %</th>
-            <th>2+ %</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {predictions.map((r, i) => (
+          {rankedMatches.map((m, i) => (
             <tr key={i}>
-              <td>{r.time}</td>
-              <td>{r.home}</td>
-              <td>{r.away}</td>
-              <td>{r.gg}%</td>
-              <td>{r.ng}%</td>
-              <td>{r.over2}%</td>
+              <td>{i + 1}</td>
+              <td>{m.datum}</td>
+              <td>{m.vreme}</td>
+              <td>{m.liga}</td>
+              <td style={{ textAlign: 'left' }}>{m.home}</td>
+              <td style={{ textAlign: 'left' }}>{m.away}</td>
+              <td>{m.NG}%</td>
+              <td>
+                <button
+                  onClick={() => deleteRow(i)}
+                  style={{ padding: '0', fontSize: '10px', height: '16px', width: '16px' }}
+                >
+                  x
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
