@@ -1,0 +1,22 @@
+/* Screen2 styles – start prazno */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 3px 4px;
+  text-align: center;
+}
+
+th {
+  background: #f0f0f0;
+  font-weight: bold;
+}
+
+tr:hover {
+  background: #f9f9f9;
+  cursor: pointer;
+}
