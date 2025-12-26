@@ -7,38 +7,44 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout koda
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      # Instaliraj Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
           node-version: 20
 
+      # Instaliraj sve zavisnosti, uključujući xlsx
       - name: Install dependencies
         run: npm install
 
-      - name: Install Capacitor Android
-        run: npm install @capacitor/android --save
-
-      - name: Build web assets
+      # Build React aplikacije
+      - name: Build React App
         run: npm run build
 
-      - name: Copy web assets to Android
+      # Instaliraj Capacitor CLI globalno
+      - name: Install Capacitor
+        run: npm install -g @capacitor/cli
+
+      # Copy build u Android projekat
+      - name: Capacitor Copy
         run: npx cap copy android
 
+      # Build Android APK
       - name: Build Android APK
-        run: |
-          cd android
-          ./gradlew assembleDebug
-        shell: bash
+        working-directory: android
+        run: ./gradlew assembleDebug
 
+      # Upload APK kao artefakt
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: app-debug.apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
