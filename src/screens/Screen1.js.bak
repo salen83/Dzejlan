@@ -6,6 +6,7 @@ export default function Screen1() {
   const [rows, setRows] = useState([]);
   const [countryColors, setCountryColors] = useState({});
 
+  // Učitaj prethodne podatke i boje iz localStorage
   useEffect(() => {
     const savedRows = JSON.parse(localStorage.getItem('rows')) || [];
     const savedColors = JSON.parse(localStorage.getItem('countryColors')) || {};
@@ -24,9 +25,9 @@ export default function Screen1() {
   };
 
   const getCountryColor = (country) => {
-    if (!country) return '#ffffff';
     if (countryColors[country]) return countryColors[country];
 
+    // Dodela boje po državi koristeći hash funkciju
     let hash = 0;
     for (let i = 0; i < country.length; i++) {
       hash = country.charCodeAt(i) + ((hash << 5) - hash);
@@ -49,6 +50,7 @@ export default function Screen1() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
 
+      // Mapiranje novih redova
       const newRows = data.map((r, i) => ({
         rb: rows.length + i + 1,
         datum: formatDatum(String(r['datum'] ?? '')),
@@ -98,7 +100,7 @@ export default function Screen1() {
         </thead>
         <tbody>
           {rows.map((r, i) => {
-            const country = (r.liga || '').split(' ')[0] || r.liga;
+            const country = r.(liga || '').split(' ')[0] || r.liga; // uzimamo prvu reč kao državu
             const color = getCountryColor(country);
 
             return (
