@@ -1,62 +1,37 @@
 import React, { useContext } from "react";
 import { MatchesContext } from "../MatchesContext";
 
-const calculateProbabilities = (team) => {
-  return {
-    gg: Math.random(),
-    ng: Math.random(),
-    twoPlus: Math.random(),
-    sevenPlus: Math.random()
-  };
-};
-
 export default function Screen7() {
-  const { futureMatches } = useContext(MatchesContext);
+  const { predictions } = useContext(MatchesContext);
 
-  const rankedMatches = (futureMatches || []).map(m => {
-    const homeProb = calculateProbabilities(m.home);
-    const awayProb = calculateProbabilities(m.away);
-
-    return {
-      ...m,
-      homeProb,
-      awayProb
-    };
-  });
+  const list = [...predictions]
+    .filter(p => !isNaN(p.over2))
+    .sort((a,b) => b.over2 - a.over2);
 
   return (
     <div>
-      <h2>Rangirani mečevi po verovatnoći NG %</h2>
-      <table>
+      <h2>Rang 2+ %</h2>
+      <table style={{ borderCollapse: "collapse", width: "auto" }}>
         <thead>
           <tr>
-            <th>#</th>
-            <th>Datum</th>
-            <th>Vreme</th>
-            <th>Liga</th>
-            <th>Domacin</th>
-            <th>Gost</th>
-            <th>GG</th>
-            <th>NG</th>
-            <th>2+</th>
-            <th>7+</th>
+            <th style={{textAlign:"left", width:"30px"}}>#</th>
+            <th style={{textAlign:"left", width:"120px"}}>Domaćin</th>
+            <th style={{textAlign:"left", width:"120px"}}>Gost</th>
+            <th style={{textAlign:"left", width:"50px"}}>2+ %</th>
           </tr>
         </thead>
         <tbody>
-          {rankedMatches.map((p, i) => (
-            <tr key={i}>
-              <td>{i + 1}</td>
-              <td>{p.datum}</td>
-              <td>{p.vreme}</td>
-              <td>{p.liga}</td>
-              <td>{p.home}</td>
-              <td>{p.away}</td>
-              <td>{(p.homeProb.gg + p.awayProb.gg) / 2}</td>
-              <td>{(p.homeProb.ng + p.awayProb.ng) / 2}</td>
-              <td>{(p.homeProb.twoPlus + p.awayProb.twoPlus) / 2}</td>
-              <td>{(p.homeProb.sevenPlus + p.awayProb.sevenPlus) / 2}</td>
-            </tr>
-          ))}
+          {list.map((p,i) => {
+            const bgColor = p.over2 > 80 ? "#c8facc" : "transparent";
+            return (
+              <tr key={i} style={{backgroundColor: bgColor}}>
+                <td style={{textAlign:"left", padding:"2px 4px"}}>{i+1}</td>
+                <td style={{textAlign:"left", padding:"2px 4px", whiteSpace:"nowrap"}}>{p.home}</td>
+                <td style={{textAlign:"left", padding:"2px 4px", whiteSpace:"nowrap"}}>{p.away}</td>
+                <td style={{textAlign:"left", padding:"2px 4px"}}>{p.over2}%</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
