@@ -1,0 +1,49 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout koda
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Instalacija zavisnosti
+      - name: Install dependencies
+        run: npm install
+
+      # Build React aplikacije
+      - name: Build React app
+        run: npm run build
+
+      # Instalacija Capacitor CLI
+      - name: Install Capacitor CLI
+        run: npm install @capacitor/cli @capacitor/android --save-dev
+
+      # Sinhronizacija Android projekta
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # Build Android APK
+      - name: Build Android APK
+        run: npx cap build android --release
+
+      # Upload APK kao artefakt
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
