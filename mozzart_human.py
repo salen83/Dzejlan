@@ -1,7 +1,7 @@
 from playwright.sync_api import sync_playwright
 import json
 
-matches_data = []
+captured = []
 
 with sync_playwright() as p:
     browser = p.chromium.launch(
@@ -10,27 +10,26 @@ with sync_playwright() as p:
     )
 
     context = browser.new_context()
-
     page = context.new_page()
 
-    def log_response(resp):
-        if "https://www.mozzartbet.com/betting/matches" in resp.url:
-            print("🎯 FOUND MATCHES API")
+    def log_request(req):
+        if "/betting/matches" in req.url:
+            print("\n🎯 REQUEST")
+            print("URL:", req.url)
+            print("METHOD:", req.method)
 
             try:
-                data = resp.json()
+                print("POST DATA:", req.post_data)
+            except:
+                pass
 
-                matches_data.append({
-                    "url": resp.url,
-                    "data": data
-                })
+            captured.append({
+                "url": req.url,
+                "method": req.method,
+                "post_data": req.post_data
+            })
 
-                print("✅ JSON captured")
-
-            except Exception as e:
-                print("❌ JSON ERROR:", e)
-
-    page.on("response", log_response)
+    page.on("request", log_request)
 
     page.goto(
         "https://www.mozzartbet.com/sr/kladjenje/sport/1?date=all_days",
@@ -40,8 +39,6 @@ with sync_playwright() as p:
     page.wait_for_timeout(15000)
 
     with open("matches.json", "w", encoding="utf-8") as f:
-        json.dump(matches_data, f, ensure_ascii=False, indent=2)
-
-    print("Saved responses:", len(matches_data))
+        json.dump(captured, f, ensure_ascii=False, indent=2)
 
     browser.close()
