@@ -1,4 +1,5 @@
 from playwright.sync_api import sync_playwright
+from openpyxl import Workbook
 import json
 
 all_matches = []
@@ -20,6 +21,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(5000)
 
     for current_page in range(0, 20):
+
         payload = {
             "date": "all_days",
             "sort": "bycompetition",
@@ -55,6 +57,51 @@ with sync_playwright() as p:
 
     with open("matches.json", "w", encoding="utf-8") as f:
         json.dump(all_matches, f, ensure_ascii=False, indent=2)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Matches"
+
+    headers = [
+        "ID",
+        "Home",
+        "Away",
+        "League",
+        "Sport",
+        "Start Time"
+    ]
+
+    ws.append(headers)
+
+    for match in all_matches:
+
+        home = ""
+        away = ""
+        league = ""
+        sport = ""
+        start_time = ""
+        match_id = ""
+
+        try:
+            home = match.get("home", "")
+            away = match.get("away", "")
+            league = match.get("competitionName", "")
+            sport = match.get("sportName", "")
+            start_time = match.get("startTime", "")
+            match_id = match.get("id", "")
+        except:
+            pass
+
+        ws.append([
+            match_id,
+            home,
+            away,
+            league,
+            sport,
+            start_time
+        ])
+
+    wb.save("matches.xlsx")
 
     print("TOTAL:", len(all_matches))
 

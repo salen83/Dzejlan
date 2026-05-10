@@ -18,14 +18,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright
+          pip install playwright openpyxl
           playwright install chromium
 
       - name: Run script
         run: python mozzart_human.py
 
-      - name: Upload artifact
+      - name: Upload JSON
         uses: actions/upload-artifact@v4
         with:
           name: matches-json
           path: matches.json
+
+      - name: Upload XLSX
+        uses: actions/upload-artifact@v4
+        with:
+          name: matches-xlsx
+          path: matches.xlsx
