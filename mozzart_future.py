@@ -8,13 +8,13 @@ MOBILE_UA = (
     "Chrome/120.0.0.0 Mobile Safari/537.36"
 )
 
-def scrape_future_matches():
+def scrape():
     url = "https://www.mozzartbet.com/sr/kladjenje/Fudbal/1"
 
-    data = []
+    matches = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
 
         context = browser.new_context(
             user_agent=MOBILE_UA,
@@ -25,60 +25,81 @@ def scrape_future_matches():
         page = context.new_page()
 
         def handle_response(response):
-            nonlocal data
+            nonlocal matches
             try:
-                if "betting/matches" in response.url:
-                    json_data = response.json()
-                    events = json_data.get("events", [])
-                    if events:
-                        data.extend(events)
+                ct = response.headers.get("content-type", "")
+
+                if "json" in ct:
+                    data = response.json()
+
+                    if isinstance(data, dict):
+                        if "events" in data:
+                            matches.extend(data["events"])
+                        elif "data" in data and isinstance(data["data"], list):
+                            matches.extend(data["data"])
+
             except:
                 pass
 
         page.on("response", handle_response)
 
+        print("Otvaram stranicu...")
         page.goto(url, timeout=60000)
-        time.sleep(5)
 
-        # scroll da učita sve
-        for _ in range(20):
+        page.wait_for_timeout(8000)
+
+        for _ in range(15):
             page.mouse.wheel(0, 2000)
-            time.sleep(1)
+            page.wait_for_timeout(1200)
+
+        page.wait_for_timeout(5000)
 
         browser.close()
 
-    return data
+    return matches
 
 
 def transform(matches):
     rows = []
 
     for m in matches:
-        markets = m.get("markets", [])
+        try:
+            home = m.get("homeTeam", {}).get("name", "")
+            away = m.get("awayTeam", {}).get("name", "")
+            league = m.get("competition", {}).get("name", "")
+            time_m = m.get("startTime", "")
 
-        odds_1x2 = []
+            odds = []
 
-        for mk in markets:
-            for o in mk.get("outcomes", []):
-                odds_1x2.append(o.get("odds"))
+            for mk in m.get("markets", []):
+                for o in mk.get("outcomes", []):
+                    if "odds" in o:
+                        odds.append(str(o["odds"]))
 
-        rows.append({
-            "Liga": m.get("competition", {}).get("name", ""),
-            "Home": m.get("homeTeam", {}).get("name", ""),
-            "Away": m.get("awayTeam", {}).get("name", ""),
-            "Vreme": m.get("startTime", ""),
-            "Kvote": " | ".join([str(x) for x in odds_1x2 if x])
-        })
+            rows.append({
+                "Liga": league,
+                "Home": home,
+                "Away": away,
+                "Vreme": time_m,
+                "Kvote": " | ".join(odds)
+            })
+
+        except:
+            pass
 
     return rows
 
 
 def main():
-    print("Skidam buduće mečeve...")
+    print("Skidam Mozzart buduće mečeve...")
 
-    matches = scrape_future_matches()
+    matches = scrape()
 
     print("RAW:", len(matches))
+
+    if not matches:
+        print("Nema podataka (blokada ili promena stranice)")
+        return
 
     rows = transform(matches)
 
