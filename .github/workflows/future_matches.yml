@@ -1,0 +1,35 @@
+name: Mozzart Future Matches
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "*/30 * * * *"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install pandas openpyxl playwright
+          playwright install chromium
+
+      - name: Run scraper
+        run: |
+          python future_matches.py
+
+      - name: Upload Excel
+        uses: actions/upload-artifact@v4
+        with:
+          name: future_matches
+          path: output/future_matches.xlsx
