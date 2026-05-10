@@ -14,7 +14,14 @@ def scrape():
     matches = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-blink-features=AutomationControlled"
+            ]
+        )
 
         context = browser.new_context(
             user_agent=MOBILE_UA,
