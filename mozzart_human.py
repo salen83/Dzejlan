@@ -1,17 +1,46 @@
 from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 import json
+import time
 
 all_matches = []
+seen_ids = set()
 
 with sync_playwright() as p:
+
     browser = p.chromium.launch(
         headless=True,
         args=["--no-sandbox"]
     )
 
     context = browser.new_context()
+
     page = context.new_page()
+
+    def capture_response(resp):
+
+        if "/betting/matches" not in resp.url:
+            return
+
+        try:
+            data = resp.json()
+
+            matches = data.get("matches", [])
+
+            print("CAPTURED:", len(matches))
+
+            for match in matches:
+
+                match_id = match.get("id")
+
+                if match_id not in seen_ids:
+                    seen_ids.add(match_id)
+                    all_matches.append(match)
+
+        except Exception as e:
+            print("ERROR:", e)
+
+    page.on("response", capture_response)
 
     page.goto(
         "https://www.mozzartbet.com/sr/kladjenje/sport/1?date=all_days",
@@ -20,40 +49,14 @@ with sync_playwright() as p:
 
     page.wait_for_timeout(5000)
 
-    for current_page in range(0, 20):
+    # skrol da frontend učita dodatne stranice
+    for i in range(30):
 
-        payload = {
-            "date": "all_days",
-            "sort": "bycompetition",
-            "currentPage": current_page,
-            "pageSize": 15,
-            "sportId": 1,
-            "competitionIds": [],
-            "search": "",
-            "matchTypeId": 0
-        }
+        print("SCROLL", i)
 
-        print(f"PAGE {current_page}")
+        page.mouse.wheel(0, 5000)
 
-        response = page.request.post(
-            "https://www.mozzartbet.com/betting/matches",
-            data=payload
-        )
-
-        try:
-            data = response.json()
-
-            matches = data.get("matches", [])
-
-            print("MATCHES:", len(matches))
-
-            if not matches:
-                break
-
-            all_matches.extend(matches)
-
-        except Exception as e:
-            print("ERROR:", e)
+        page.wait_for_timeout(2000)
 
     with open("matches.json", "w", encoding="utf-8") as f:
         json.dump(all_matches, f, ensure_ascii=False, indent=2)
@@ -62,43 +65,24 @@ with sync_playwright() as p:
     ws = wb.active
     ws.title = "Matches"
 
-    headers = [
+    ws.append([
         "ID",
         "Home",
         "Away",
         "League",
         "Sport",
         "Start Time"
-    ]
-
-    ws.append(headers)
+    ])
 
     for match in all_matches:
 
-        home = ""
-        away = ""
-        league = ""
-        sport = ""
-        start_time = ""
-        match_id = ""
-
-        try:
-            home = match.get("home", "")
-            away = match.get("away", "")
-            league = match.get("competitionName", "")
-            sport = match.get("sportName", "")
-            start_time = match.get("startTime", "")
-            match_id = match.get("id", "")
-        except:
-            pass
-
         ws.append([
-            match_id,
-            home,
-            away,
-            league,
-            sport,
-            start_time
+            match.get("id", ""),
+            match.get("home", ""),
+            match.get("away", ""),
+            match.get("competitionName", ""),
+            match.get("sportName", ""),
+            match.get("startTime", "")
         ])
 
     wb.save("matches.xlsx")
