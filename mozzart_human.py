@@ -1,6 +1,9 @@
 from playwright.sync_api import sync_playwright
 import time
 import random
+import json
+
+results = []
 
 def human_sleep(a=1.5, b=4.0):
     time.sleep(random.uniform(a, b))
@@ -19,6 +22,23 @@ with sync_playwright() as p:
 
     print("🔄 Loading page...")
 
+    def log_response(resp):
+        if "betting/matches" in resp.url:
+            print("🎯 MATCHES API HIT")
+
+            try:
+                data = resp.json()
+
+                results.append({
+                    "url": resp.url,
+                    "data": data
+                })
+
+            except Exception as e:
+                print("ERROR:", e)
+
+    page.on("response", log_response)
+
     page.goto(
         "https://www.mozzartbet.com/sr/kladjenje/sport/1?date=all_days",
         wait_until="domcontentloaded"
@@ -26,22 +46,11 @@ with sync_playwright() as p:
 
     human_sleep()
 
-    # sačekaj mrežu stabilno
-    page.wait_for_timeout(5000)
-
-    print("✅ Page loaded")
-
-    # hvatanje API poziva
-    def log_response(resp):
-        if "betting/matches" in resp.url:
-            print("\\n🎯 MATCHES API HIT")
-            try:
-                print(resp.json())
-            except:
-                print(resp.text())
-
-    page.on("response", log_response)
-
     page.wait_for_timeout(10000)
+
+    with open("matches.json", "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+
+    print(f"✅ Saved {len(results)} responses")
 
     browser.close()
